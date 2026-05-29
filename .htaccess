@@ -1,0 +1,21 @@
+<IfModule mod_rewrite.c>
+    AddHandler application/x-httpd-php74 .php
+
+    <IfModule mod_negotiation.c>
+        Options -MultiViews
+    </IfModule>
+
+    RewriteEngine On
+
+    # Jangan rewrite lagi jika sudah mengarah ke public/ atau server.php
+    RewriteRule ^public/ - [L]
+    RewriteRule ^server\.php$ - [L]
+
+    # File statis (ada ekstensi) → serve dari public/
+    RewriteCond %{REQUEST_URI} (\.\w+$) [NC]
+    RewriteRule ^(.*)$ public/$1 [L]
+
+    # Semua request lain → server.php
+    RewriteRule ^ server.php [L]
+
+</IfModule>
