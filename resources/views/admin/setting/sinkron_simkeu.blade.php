@@ -227,70 +227,96 @@
             // Show log table
             $('#table_log_sinkron_simkeu').removeClass('d-none');
             $('#log_sinkron_simkeu_empty').addClass('d-none');
+            $('#tbody_log_sinkron_simkeu').empty(); // Clear old logs
 
-            $.ajax({
-                type: "POST",
-                url: "{{ route('admin.setting.sinkronSimkeu') }}",
-                data: JSON.stringify({
-                    tahun_id: tahunId,
-                    batch_size: batchSize,
-                    jenjang: prodiJenjang
-                }),
-                contentType: 'application/json',
-                headers: {
-                    'X-CSRF-TOKEN': '{{ csrf_token() }}'
-                },
-                timeout: 0, // no timeout on client
-                success: function(response) {
-                    if (response.status) {
-                        let data = response.data;
-                        let total = data.total;
-                        let successCount = data.success;
-                        let failedCount = data.failed;
+            // Initialize variables for batch tracking
+            let totalSuccess = 0;
+            let totalFailed = 0;
 
-                        // Update progress bar
-                        $bar.css('width', '100%').text('100%');
-                        $bar.removeClass('progress-bar-animated bg-info');
-                        $bar.addClass(failedCount > 0 ? 'bg-warning' : 'bg-success');
-                        $('#progress_success_sinkron_simkeu').text('✓ Berhasil: ' + successCount);
-                        $('#progress_failed_sinkron_simkeu').text('✗ Gagal: ' + failedCount);
-                        $('#progress_total_sinkron_simkeu').text('Total: ' + total + '/' + total);
+            function processBatch(offset) {
+                $.ajax({
+                    type: "POST",
+                    url: "{{ route('admin.setting.sinkronSimkeu') }}",
+                    data: JSON.stringify({
+                        tahun_id: tahunId,
+                        batch_size: batchSize,
+                        jenjang: prodiJenjang,
+                        offset: offset
+                    }),
+                    contentType: 'application/json',
+                    headers: {
+                        'X-CSRF-TOKEN': '{{ csrf_token() }}'
+                    },
+                    timeout: 0, // no timeout on client
+                    success: function(response) {
+                        if (response.status) {
+                            let total = response.total;
+                            let currentOffset = response.next_offset || offset; // Handle if no next_offset
+                            if (response.done) currentOffset = total; // If done, ensure it shows 100%
 
-                        // Fill log table
-                        data.logs.forEach(function(log) {
-                            let statusBadge = log.success
-                                ? '<span class="badge badge-success">Berhasil</span>'
-                                : '<span class="badge badge-danger">Gagal</span>';
-                            let jumlah = new Intl.NumberFormat('id-ID', {
-                                style: 'currency',
-                                currency: 'IDR',
-                                minimumFractionDigits: 0
-                            }).format(log.jumlah);
+                            totalSuccess += response.success;
+                            totalFailed += response.failed;
 
-                            $('#tbody_log_sinkron_simkeu').append(`
-                                <tr class="${log.success ? '' : 'table-danger'}">
-                                    <td>${log.no}</td>
-                                    <td>${log.nim}</td>
-                                    <td>${jumlah}</td>
-                                    <td>${statusBadge}</td>
-                                    <td><small>${log.message}</small></td>
-                                </tr>
-                            `);
-                        });
+                            // Update progress bar
+                            let percentage = total > 0 ? Math.round((currentOffset / total) * 100) : 100;
+                            $bar.css('width', percentage + '%').text(percentage + '%');
+                            
+                            $('#progress_success_sinkron_simkeu').text('✓ Berhasil: ' + totalSuccess);
+                            $('#progress_failed_sinkron_simkeu').text('✗ Gagal: ' + totalFailed);
+                            $('#progress_total_sinkron_simkeu').text('Total: ' + currentOffset + '/' + total);
 
-                        swalToast(200, `Sinkronisasi selesai: ${successCount} berhasil, ${failedCount} gagal`);
-                    } else {
-                        swalToast(500, response.message || 'Gagal sinkronisasi');
+                            // Fill log table
+                            response.logs.forEach(function(log) {
+                                let statusBadge = log.success
+                                    ? '<span class="badge badge-success">Berhasil</span>'
+                                    : '<span class="badge badge-danger">Gagal</span>';
+                                let jumlah = new Intl.NumberFormat('id-ID', {
+                                    style: 'currency',
+                                    currency: 'IDR',
+                                    minimumFractionDigits: 0
+                                }).format(log.jumlah);
+
+                                $('#tbody_log_sinkron_simkeu').append(`
+                                    <tr class="${log.success ? '' : 'table-danger'}">
+                                        <td>${log.no}</td>
+                                        <td>${log.nim}</td>
+                                        <td>${jumlah}</td>
+                                        <td>${statusBadge}</td>
+                                        <td><small>${log.message}</small></td>
+                                    </tr>
+                                `);
+                            });
+
+                            if (!response.done) {
+                                // Process next batch after a short delay to be nice to the browser
+                                setTimeout(function() {
+                                    processBatch(response.next_offset);
+                                }, 100);
+                            } else {
+                                // Done
+                                $bar.removeClass('progress-bar-animated bg-info');
+                                $bar.addClass(totalFailed > 0 ? 'bg-warning' : 'bg-success');
+                                swalToast(200, `Sinkronisasi selesai: ${totalSuccess} berhasil, ${totalFailed} gagal`);
+                                
+                                $btn.attr('disabled', false);
+                                $btn.html('<i class="fas fa-cloud-upload-alt mx-2"></i>Sinkron ke SIMKEU');
+                            }
+                        } else {
+                            swalToast(500, response.message || 'Gagal sinkronisasi');
+                            $btn.attr('disabled', false);
+                            $btn.html('<i class="fas fa-cloud-upload-alt mx-2"></i>Sinkron ke SIMKEU');
+                        }
+                    },
+                    error: function(xhr) {
+                        swalToast(500, 'Terjadi kesalahan: ' + (xhr.responseJSON?.message || xhr.statusText));
+                        $btn.attr('disabled', false);
+                        $btn.html('<i class="fas fa-cloud-upload-alt mx-2"></i>Sinkron ke SIMKEU');
                     }
-                },
-                error: function(xhr) {
-                    swalToast(500, 'Terjadi kesalahan: ' + (xhr.responseJSON?.message || xhr.statusText));
-                },
-                complete: function() {
-                    $btn.attr('disabled', false);
-                    $btn.html('<i class="fas fa-cloud-upload-alt mx-2"></i>Sinkron ke SIMKEU');
-                }
-            });
+                });
+            }
+
+            // Start first batch
+            processBatch(0);
         }
     </script>
 @endpush

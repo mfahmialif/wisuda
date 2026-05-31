@@ -280,24 +280,25 @@ class SettingController extends Controller
     }
 
     /**
-     * Sinkronkan semua data pembayaran ke SIMKEU V2 secara batch.
+     * Sinkronkan data pembayaran ke SIMKEU V2 per batch (1 request = 1 batch).
+     * Frontend harus memanggil endpoint ini berulang kali dengan offset yang meningkat.
      */
     public function sinkronSimkeu(Request $request)
     {
-        // Disable time limit agar tidak timeout
-        set_time_limit(0);
-        ini_set('max_execution_time', 0);
+        set_time_limit(120);
 
         try {
             $request->validate([
                 'tahun_id'   => 'required|integer',
                 'batch_size' => 'nullable|integer|min:1|max:50',
+                'offset'     => 'nullable|integer|min:0',
             ]);
 
             $batchSize = $request->batch_size ?? 10;
+            $offset    = $request->offset ?? 0;
 
-            // Ambil semua pembayaran beserta relasi peserta dan tahun
-            $pembayaranList = Pembayaran::with(['peserta.tahun'])
+            // Query dasar
+            $baseQuery = Pembayaran::with(['peserta.tahun'])
                 ->whereHas('peserta', function ($q) use ($request) {
                     $q->where('tahun_id', $request->tahun_id);
                     if ($request->jenjang) {
@@ -305,23 +306,85 @@ class SettingController extends Controller
                             $pq->where('jenjang', $request->jenjang);
                         });
                     }
-                })
-                ->get();
+                });
 
-            if ($pembayaranList->isEmpty()) {
+            // Hitung total (hanya pada request pertama untuk efisiensi)
+            $total = $baseQuery->count();
+
+            if ($total === 0) {
                 return response()->json([
                     'status'  => false,
-                    'message' => 'Tidak ada data pembayaran untuk tahun ini',
+                    'message' => 'Tidak ada data pembayaran untuk filter ini',
                 ]);
             }
 
-            $simkeu = new SimkeuApp();
-            $result = $simkeu->kirimPembayaranBatch($pembayaranList, $batchSize);
+            // Ambil batch sesuai offset
+            $batch = (clone $baseQuery)
+                ->orderBy('pembayaran.id', 'asc')
+                ->skip($offset)
+                ->take($batchSize)
+                ->get();
+
+            if ($batch->isEmpty()) {
+                return response()->json([
+                    'status'   => true,
+                    'done'     => true,
+                    'message'  => 'Semua data sudah diproses',
+                    'total'    => $total,
+                    'offset'   => $offset,
+                    'success'  => 0,
+                    'failed'   => 0,
+                    'logs'     => [],
+                ]);
+            }
+
+            // Proses batch ini
+            $simkeu  = new SimkeuApp();
+            $logs    = [];
+            $success = 0;
+            $failed  = 0;
+
+            foreach ($batch as $index => $pembayaran) {
+                $nim            = @$pembayaran->peserta->nim ?? '-';
+                $thAkademikKode = @$pembayaran->peserta->tahun->kode ?? '-';
+
+                $payload = [
+                    'nim'              => $nim,
+                    'jenis_pembayaran' => SimkeuApp::mapJenisPembayaran($pembayaran->jenis_pembayaran),
+                    'th_akademik_kode' => $thAkademikKode,
+                    'tanggal'          => $pembayaran->created_at->format('Y-m-d H:i:s'),
+                    'jumlah'           => (int) $pembayaran->jumlah,
+                ];
+
+                $result = $simkeu->kirimPembayaranWisuda($payload);
+
+                $logs[] = [
+                    'no'      => $offset + $index + 1,
+                    'nim'     => $nim,
+                    'jumlah'  => $pembayaran->jumlah,
+                    'success' => $result['success'],
+                    'message' => $result['message'],
+                ];
+
+                if ($result['success']) {
+                    $success++;
+                } else {
+                    $failed++;
+                }
+            }
+
+            $nextOffset = $offset + $batch->count();
 
             return response()->json([
-                'status'  => true,
-                'message' => "Sinkronisasi selesai: {$result['success']} berhasil, {$result['failed']} gagal",
-                'data'    => $result,
+                'status'      => true,
+                'done'        => $nextOffset >= $total,
+                'message'     => "Batch selesai: {$success} berhasil, {$failed} gagal",
+                'total'       => $total,
+                'offset'      => $offset,
+                'next_offset' => $nextOffset,
+                'success'     => $success,
+                'failed'      => $failed,
+                'logs'        => $logs,
             ]);
         } catch (\Illuminate\Validation\ValidationException $e) {
             return response()->json([
