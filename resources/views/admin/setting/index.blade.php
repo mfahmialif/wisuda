@@ -32,6 +32,12 @@
                     <div class="col-12">
                         @include('admin.setting.generate_qr')
                     </div>
+                    <div class="col-12">
+                        @include('admin.setting.tes_sinkron_simkeu')
+                    </div>
+                    <div class="col-12">
+                        @include('admin.setting.sinkron_simkeu')
+                    </div>
                 </div>
             </div><!-- /.container-fluid -->
         </section>

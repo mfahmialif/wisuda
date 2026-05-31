@@ -5,7 +5,10 @@ namespace App\Http\Controllers\Admin;
 use App\Http\Controllers\Controller;
 use App\Http\Services\Helper;
 use App\Http\Services\Message;
+use App\Http\Services\SimkeuApp;
 use App\Models\Api;
+use App\Models\Pembayaran;
+use App\Models\Prodi;
 use App\Models\Peserta;
 use App\Models\Setting;
 use App\Models\Tahun;
@@ -27,8 +30,9 @@ class SettingController extends Controller
 
         $tahun = Tahun::all();
         $tipe = Helper::getEnumValues('peserta', 'tipe');
+        $prodi = Prodi::all();
 
-        return view('admin.setting.index', compact('setting', 'fonnte', 'zenziva', 'satuconnect', 'tahun', 'tipe'));
+        return view('admin.setting.index', compact('setting', 'fonnte', 'zenziva', 'satuconnect', 'tahun', 'tipe', 'prodi'));
     }
 
     public function save(Request $request)
@@ -245,6 +249,194 @@ class SettingController extends Controller
                 'data' => $th->getMessage(),
                 'req' => $request->all(),
             ];
+        }
+    }
+
+    /**
+     * Hitung jumlah pembayaran berdasarkan tahun akademik.
+     */
+    public function sinkronSimkeuCount(Request $request)
+    {
+        try {
+            $count = Pembayaran::join('peserta', 'peserta.id', '=', 'pembayaran.peserta_id')
+                ->where('peserta.tahun_id', $request->tahun_id)
+                ->when($request->prodi_id, function ($q) use ($request) {
+                    $q->where('peserta.prodi_id', $request->prodi_id);
+                })
+                ->count();
+
+            return [
+                'status' => true,
+                'data'   => $count,
+            ];
+        } catch (\Throwable $th) {
+            return [
+                'status' => false,
+                'data'   => 0,
+                'error'  => $th->getMessage(),
+            ];
+        }
+    }
+
+    /**
+     * Sinkronkan semua data pembayaran ke SIMKEU V2 secara batch.
+     */
+    public function sinkronSimkeu(Request $request)
+    {
+        // Disable time limit agar tidak timeout
+        set_time_limit(0);
+        ini_set('max_execution_time', 0);
+
+        try {
+            $request->validate([
+                'tahun_id'   => 'required|integer',
+                'batch_size' => 'nullable|integer|min:1|max:50',
+            ]);
+
+            $batchSize = $request->batch_size ?? 10;
+
+            // Ambil semua pembayaran beserta relasi peserta dan tahun
+            $pembayaranList = Pembayaran::with(['peserta.tahun'])
+                ->whereHas('peserta', function ($q) use ($request) {
+                    $q->where('tahun_id', $request->tahun_id);
+                    if ($request->prodi_id) {
+                        $q->where('prodi_id', $request->prodi_id);
+                    }
+                })
+                ->get();
+
+            if ($pembayaranList->isEmpty()) {
+                return response()->json([
+                    'status'  => false,
+                    'message' => 'Tidak ada data pembayaran untuk tahun ini',
+                ]);
+            }
+
+            $simkeu = new SimkeuApp();
+            $result = $simkeu->kirimPembayaranBatch($pembayaranList, $batchSize);
+
+            return response()->json([
+                'status'  => true,
+                'message' => "Sinkronisasi selesai: {$result['success']} berhasil, {$result['failed']} gagal",
+                'data'    => $result,
+            ]);
+        } catch (\Illuminate\Validation\ValidationException $e) {
+            return response()->json([
+                'status'  => false,
+                'message' => 'Validasi gagal',
+                'errors'  => $e->errors(),
+            ], 422);
+        } catch (\Throwable $th) {
+            return response()->json([
+                'status'  => false,
+                'message' => 'Gagal sinkronisasi: ' . $th->getMessage(),
+            ], 500);
+        }
+    }
+
+    /**
+     * List pembayaran beserta data peserta untuk tes sinkron (berdasarkan tahun, dengan pagination).
+     */
+    public function tesSinkronSimkeuList(Request $request)
+    {
+        try {
+            $perPage = $request->per_page ?? 10;
+
+            $query = Pembayaran::join('peserta', 'peserta.id', '=', 'pembayaran.peserta_id')
+                ->join('prodi', 'prodi.id', '=', 'peserta.prodi_id')
+                ->join('tahun', 'tahun.id', '=', 'peserta.tahun_id')
+                ->join('users', 'users.id', '=', 'peserta.user_id')
+                ->where('peserta.tahun_id', $request->tahun_id)
+                ->when($request->prodi_id, function ($q) use ($request) {
+                    $q->where('peserta.prodi_id', $request->prodi_id);
+                })
+                ->when($request->search, function ($q) use ($request) {
+                    $q->where(function ($q2) use ($request) {
+                        $q2->where('peserta.nim', 'LIKE', "%{$request->search}%")
+                           ->orWhere('peserta.nama', 'LIKE', "%{$request->search}%");
+                    });
+                })
+                ->select(
+                    'pembayaran.id',
+                    'pembayaran.jumlah',
+                    'pembayaran.jenis_pembayaran',
+                    'pembayaran.keterangan',
+                    'pembayaran.created_at as tanggal',
+                    'peserta.nim',
+                    'peserta.nama',
+                    'prodi.nama as prodi_nama',
+                    'prodi.alias as prodi_alias',
+                    'tahun.kode as th_akademik_kode',
+                    'tahun.nama as tahun_nama',
+                    'users.jenis_kelamin',
+                )
+                ->orderBy('pembayaran.created_at', 'desc');
+
+            $paginated = $query->paginate($perPage);
+
+            $paginated->getCollection()->transform(function ($item) {
+                $item->tanggal = \Carbon::parse($item->tanggal)->format('Y-m-d H:i:s');
+                $item->tanggal_display = \Carbon::parse($item->tanggal)->format('d M Y, H:i');
+                $item->jumlah_display = 'Rp ' . number_format($item->jumlah, 0, ',', '.');
+                return $item;
+            });
+
+            return [
+                'status' => true,
+                'data'   => $paginated->items(),
+                'pagination' => [
+                    'current_page' => $paginated->currentPage(),
+                    'last_page'    => $paginated->lastPage(),
+                    'per_page'     => $paginated->perPage(),
+                    'total'        => $paginated->total(),
+                    'from'         => $paginated->firstItem(),
+                    'to'           => $paginated->lastItem(),
+                ],
+            ];
+        } catch (\Throwable $th) {
+            return [
+                'status' => false,
+                'data'   => [],
+                'error'  => $th->getMessage(),
+            ];
+        }
+    }
+
+    /**
+     * Tes kirim 1 data pembayaran dari DB ke SIMKEU V2 (AJAX).
+     */
+    public function tesSinkronSimkeu(Request $request)
+    {
+        try {
+            $request->validate([
+                'pembayaran_id' => 'required|integer|exists:pembayaran,id',
+            ]);
+
+            $pembayaran = Pembayaran::with(['peserta.tahun'])->findOrFail($request->pembayaran_id);
+
+            $payload = [
+                'nim'              => $pembayaran->peserta->nim,
+                'jenis_pembayaran' => SimkeuApp::mapJenisPembayaran($pembayaran->jenis_pembayaran),
+                'th_akademik_kode' => $pembayaran->peserta->tahun->kode ?? '-',
+                'tanggal'          => $pembayaran->created_at->format('Y-m-d H:i:s'),
+                'jumlah'           => (int) $pembayaran->jumlah,
+            ];
+
+            $simkeu = new SimkeuApp();
+            $result = $simkeu->kirimPembayaranWisuda($payload);
+
+            return response()->json([
+                'status'  => $result['success'],
+                'message' => $result['message'],
+                'payload' => $payload,
+                'data'    => $result['response'],
+                'debug'   => $result['debug'] ?? null,
+            ]);
+        } catch (\Throwable $th) {
+            return response()->json([
+                'status'  => false,
+                'message' => 'Error: ' . $th->getMessage(),
+            ], 500);
         }
     }
 }

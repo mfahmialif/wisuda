@@ -194,6 +194,10 @@ Route::prefix('admin')->group(function () {
         Route::post('/tes', [SettingController::class, 'tes'])->name('admin.setting.tes');
         Route::post('/generateQr', [SettingController::class, 'generateQr'])->name('admin.setting.generateQr');
         Route::get('/getPeserta', [SettingController::class, 'getPeserta'])->name('admin.setting.getPeserta');
+        Route::get('/sinkronSimkeuCount', [SettingController::class, 'sinkronSimkeuCount'])->name('admin.setting.sinkronSimkeuCount');
+        Route::post('/sinkronSimkeu', [SettingController::class, 'sinkronSimkeu'])->name('admin.setting.sinkronSimkeu');
+        Route::post('/tesSinkronSimkeu', [SettingController::class, 'tesSinkronSimkeu'])->name('admin.setting.tesSinkronSimkeu');
+        Route::get('/tesSinkronSimkeuList', [SettingController::class, 'tesSinkronSimkeuList'])->name('admin.setting.tesSinkronSimkeuList');
     });
 
     // QR Code

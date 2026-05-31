@@ -28,14 +28,15 @@ Route::middleware('apiauth')->group(function () {
         Route::post('/count', [SiswaController::class, 'count'])->name('api.siswa.count');
         Route::post('/find', [SiswaController::class, 'find'])->name('api.siswa.fiind');
         Route::post('/registrasi', [RegistrasiController::class, 'registrasi'])->name('api.siswa.registrasi');
+        Route::put('/edit-pembayaran', [RegistrasiController::class, 'editPembayaran'])->name('api.siswa.editPembayaran');
+        Route::delete('/hapus-pembayaran', [RegistrasiController::class, 'hapusPembayaran'])->name('api.siswa.hapusPembayaran');
+    });
+
+    Route::prefix('tahun')->group(function () {
+        Route::get('/', [TahunController::class, 'index'])->name('api.tahun.index');
     });
 });
 
 Route::prefix('peserta')->group(function () {
     Route::get('/cekWisuda', [PesertaController::class, 'cekWisuda'])->name('api.peserta.cekWisuda');
 });
-
-Route::prefix('tahun')->group(function () {
-    Route::get('/', [TahunController::class, 'index'])->name('api.tahun.index');
-});
-
