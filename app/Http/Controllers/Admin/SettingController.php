@@ -260,8 +260,9 @@ class SettingController extends Controller
         try {
             $count = Pembayaran::join('peserta', 'peserta.id', '=', 'pembayaran.peserta_id')
                 ->where('peserta.tahun_id', $request->tahun_id)
-                ->when($request->prodi_id, function ($q) use ($request) {
-                    $q->where('peserta.prodi_id', $request->prodi_id);
+                ->when($request->jenjang, function ($q) use ($request) {
+                    $q->join('prodi as prodi_filter', 'prodi_filter.id', '=', 'peserta.prodi_id')
+                       ->where('prodi_filter.jenjang', $request->jenjang);
                 })
                 ->count();
 
@@ -299,8 +300,10 @@ class SettingController extends Controller
             $pembayaranList = Pembayaran::with(['peserta.tahun'])
                 ->whereHas('peserta', function ($q) use ($request) {
                     $q->where('tahun_id', $request->tahun_id);
-                    if ($request->prodi_id) {
-                        $q->where('prodi_id', $request->prodi_id);
+                    if ($request->jenjang) {
+                        $q->whereHas('prodi', function ($pq) use ($request) {
+                            $pq->where('jenjang', $request->jenjang);
+                        });
                     }
                 })
                 ->get();
@@ -347,8 +350,8 @@ class SettingController extends Controller
                 ->join('tahun', 'tahun.id', '=', 'peserta.tahun_id')
                 ->join('users', 'users.id', '=', 'peserta.user_id')
                 ->where('peserta.tahun_id', $request->tahun_id)
-                ->when($request->prodi_id, function ($q) use ($request) {
-                    $q->where('peserta.prodi_id', $request->prodi_id);
+                ->when($request->jenjang, function ($q) use ($request) {
+                    $q->where('prodi.jenjang', $request->jenjang);
                 })
                 ->when($request->search, function ($q) use ($request) {
                     $q->where(function ($q2) use ($request) {

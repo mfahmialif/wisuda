@@ -34,19 +34,12 @@
                 </select>
             </div>
             <div class="form-group">
-                <label for="prodi_id_sinkron_simkeu">Prodi Jenjang</label>
-                <select class="form-control select2bs4 w-100" name="prodi_id" id="prodi_id_sinkron_simkeu">
-                    <option value="">-- Semua Prodi --</option>
-                    @foreach (['S1', 'S2', 'S3'] as $jenjang)
-                        @php $prodiJenjang = $prodi->where('jenjang', $jenjang); @endphp
-                        @if ($prodiJenjang->count())
-                            <optgroup label="{{ $jenjang }}">
-                                @foreach ($prodiJenjang as $p)
-                                    <option value="{{ $p->id }}">{{ $p->nama }} ({{ $p->jenjang }})</option>
-                                @endforeach
-                            </optgroup>
-                        @endif
-                    @endforeach
+                <label for="jenjang_sinkron_simkeu">Prodi Jenjang</label>
+                <select class="form-control select2bs4 w-100" name="jenjang" id="jenjang_sinkron_simkeu">
+                    <option value="">-- Semua Jenjang --</option>
+                    <option value="S1">S1</option>
+                    <option value="S2">S2</option>
+                    <option value="S3">S3</option>
                 </select>
             </div>
             <div class="row">
@@ -153,13 +146,13 @@
 
         function initSinkronSimkeu() {
             // Initialize Select2
-            $('#tahun_id_sinkron_simkeu, #prodi_id_sinkron_simkeu').select2({
+            $('#tahun_id_sinkron_simkeu, #jenjang_sinkron_simkeu').select2({
                 theme: 'bootstrap4',
                 dropdownParent: $('#form_sinkron_simkeu')
             });
 
-            // Hitung jumlah pembayaran saat tahun/prodi berubah
-            $('#tahun_id_sinkron_simkeu, #prodi_id_sinkron_simkeu').change(function() {
+            // Hitung jumlah pembayaran saat tahun/jenjang berubah
+            $('#tahun_id_sinkron_simkeu, #jenjang_sinkron_simkeu').change(function() {
                 getCountSinkronSimkeu();
             });
             getCountSinkronSimkeu();
@@ -180,11 +173,11 @@
 
         function getCountSinkronSimkeu() {
             let tahunId = $('#tahun_id_sinkron_simkeu').val();
-            let prodiId = $('#prodi_id_sinkron_simkeu').val();
+            let prodiJenjang = $('#jenjang_sinkron_simkeu').val();
             $.ajax({
                 type: "GET",
                 url: "{{ route('admin.setting.sinkronSimkeuCount') }}",
-                data: { tahun_id: tahunId, prodi_id: prodiId },
+                data: { tahun_id: tahunId, jenjang: prodiJenjang },
                 dataType: "json",
                 success: function(response) {
                     if (response.status) {
@@ -199,7 +192,7 @@
         function sinkronSimkeu() {
             let tahunId   = $('#tahun_id_sinkron_simkeu').val();
             let batchSize = parseInt($('#batch_size_sinkron_simkeu').val()) || 10;
-            let prodiId   = $('#prodi_id_sinkron_simkeu').val();
+            let prodiJenjang   = $('#jenjang_sinkron_simkeu').val();
 
             Swal.fire({
                 title: 'Konfirmasi Sinkronisasi',
@@ -212,12 +205,12 @@
                 cancelButtonText: 'Batal'
             }).then((result) => {
                 if (result.isConfirmed) {
-                    execSinkronSimkeu(tahunId, batchSize, prodiId);
+                    execSinkronSimkeu(tahunId, batchSize, prodiJenjang);
                 }
             });
         }
 
-        function execSinkronSimkeu(tahunId, batchSize, prodiId) {
+        function execSinkronSimkeu(tahunId, batchSize, prodiJenjang) {
             // Reset UI
             let $btn = $('#form_submit_sinkron_simkeu');
             let $progress = $('#progress_container_sinkron_simkeu');
@@ -241,7 +234,7 @@
                 data: JSON.stringify({
                     tahun_id: tahunId,
                     batch_size: batchSize,
-                    prodi_id: prodiId
+                    jenjang: prodiJenjang
                 }),
                 contentType: 'application/json',
                 headers: {

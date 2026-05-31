@@ -33,18 +33,11 @@
             <div class="col-md-3">
                 <div class="form-group">
                     <label>Prodi Jenjang</label>
-                    <select class="form-control" id="prodi_id_tes_sinkron">
-                        <option value="">-- Semua Prodi --</option>
-                        @foreach (['S1', 'S2', 'S3'] as $jenjang)
-                            @php $prodiJenjang = $prodi->where('jenjang', $jenjang); @endphp
-                            @if ($prodiJenjang->count())
-                                <optgroup label="{{ $jenjang }}">
-                                    @foreach ($prodiJenjang as $p)
-                                        <option value="{{ $p->id }}">{{ $p->nama }} ({{ $p->jenjang }})</option>
-                                    @endforeach
-                                </optgroup>
-                            @endif
-                        @endforeach
+                    <select class="form-control" id="jenjang_tes_sinkron">
+                        <option value="">-- Semua Jenjang --</option>
+                        <option value="S1">S1</option>
+                        <option value="S2">S2</option>
+                        <option value="S3">S3</option>
                     </select>
                 </div>
             </div>
@@ -133,7 +126,7 @@ var _jenisBayarMap = @json(\App\Http\Services\SimkeuApp::JENIS_PEMBAYARAN_MAP ??
 
 $(document).ready(function () {
     // Events
-    $('#tahun_id_tes_sinkron, #per_page_tes_sinkron, #prodi_id_tes_sinkron').on('change', function () {
+    $('#tahun_id_tes_sinkron, #per_page_tes_sinkron, #jenjang_tes_sinkron').on('change', function () {
         _tesSinkronPage = 1;
         tesSinkronLoad();
     });
@@ -160,7 +153,7 @@ function tesSinkronLoad(page) {
 
     $.get("{{ route('admin.setting.tesSinkronSimkeuList') }}", {
         tahun_id: $('#tahun_id_tes_sinkron').val(),
-        prodi_id: $('#prodi_id_tes_sinkron').val(),
+        jenjang: $('#jenjang_tes_sinkron').val(),
         per_page: $('#per_page_tes_sinkron').val(),
         search: $('#search_tes_sinkron').val(),
         page: _tesSinkronPage
