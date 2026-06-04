@@ -43,15 +43,31 @@
                 </select>
             </div>
             <div class="row">
-                <div class="col-md-6">
+                <div class="col-md-3">
                     <div class="form-group">
-                        <label for="batch_size_sinkron_simkeu">Batch Size (per kirim)</label>
-                        <input type="number" name="batch_size" class="form-control" id="batch_size_sinkron_simkeu"
-                            value="10" min="1" max="50" required>
-                        <small class="text-muted">Jumlah data yang dikirim per batch (default: 10)</small>
+                        <label for="start_record_sinkron_simkeu">Mulai dari Data Ke-</label>
+                        <input type="number" name="start_record" class="form-control" id="start_record_sinkron_simkeu"
+                            value="1" min="1" required>
+                        <small class="text-muted">Offset awal (default: 1)</small>
                     </div>
                 </div>
-                <div class="col-md-6">
+                <div class="col-md-3">
+                    <div class="form-group">
+                        <label for="end_record_sinkron_simkeu">Sampai Data Ke-</label>
+                        <input type="number" name="end_record" class="form-control" id="end_record_sinkron_simkeu"
+                            min="1" placeholder="Kosong = Semua">
+                        <small class="text-muted">Batas akhir data</small>
+                    </div>
+                </div>
+                <div class="col-md-3">
+                    <div class="form-group">
+                        <label for="batch_size_sinkron_simkeu">Batch Size</label>
+                        <input type="number" name="batch_size" class="form-control" id="batch_size_sinkron_simkeu"
+                            value="10" min="1" max="50" required>
+                        <small class="text-muted">Per kirim (max 50)</small>
+                    </div>
+                </div>
+                <div class="col-md-3">
                     <div class="form-group">
                         <label>Info Data</label>
                         <div id="info_sinkron_simkeu" class="form-control-plaintext">
@@ -193,10 +209,12 @@
             let tahunId   = $('#tahun_id_sinkron_simkeu').val();
             let batchSize = parseInt($('#batch_size_sinkron_simkeu').val()) || 10;
             let prodiJenjang   = $('#jenjang_sinkron_simkeu').val();
+            let startRecord = parseInt($('#start_record_sinkron_simkeu').val()) || 1;
+            let endRecord = parseInt($('#end_record_sinkron_simkeu').val()) || null;
 
             Swal.fire({
                 title: 'Konfirmasi Sinkronisasi',
-                text: 'Apakah Anda yakin ingin menyinkronkan semua data pembayaran ke SIMKEU?',
+                text: 'Apakah Anda yakin ingin menyinkronkan data pembayaran ke SIMKEU?',
                 icon: 'question',
                 showCancelButton: true,
                 confirmButtonColor: '#17a2b8',
@@ -205,12 +223,12 @@
                 cancelButtonText: 'Batal'
             }).then((result) => {
                 if (result.isConfirmed) {
-                    execSinkronSimkeu(tahunId, batchSize, prodiJenjang);
+                    execSinkronSimkeu(tahunId, batchSize, prodiJenjang, startRecord, endRecord);
                 }
             });
         }
 
-        function execSinkronSimkeu(tahunId, batchSize, prodiJenjang) {
+        function execSinkronSimkeu(tahunId, batchSize, prodiJenjang, startRecord, endRecord) {
             // Reset UI
             let $btn = $('#form_submit_sinkron_simkeu');
             let $progress = $('#progress_container_sinkron_simkeu');
@@ -232,17 +250,23 @@
             // Initialize variables for batch tracking
             let totalSuccess = 0;
             let totalFailed = 0;
+            let initialOffset = startRecord - 1;
 
             function processBatch(offset) {
+                let payload = {
+                    tahun_id: tahunId,
+                    batch_size: batchSize,
+                    jenjang: prodiJenjang,
+                    offset: offset
+                };
+                if (endRecord) {
+                    payload.end_record = endRecord;
+                }
+
                 $.ajax({
                     type: "POST",
                     url: "{{ route('admin.setting.sinkronSimkeu') }}",
-                    data: JSON.stringify({
-                        tahun_id: tahunId,
-                        batch_size: batchSize,
-                        jenjang: prodiJenjang,
-                        offset: offset
-                    }),
+                    data: JSON.stringify(payload),
                     contentType: 'application/json',
                     headers: {
                         'X-CSRF-TOKEN': '{{ csrf_token() }}'
@@ -251,19 +275,24 @@
                     success: function(response) {
                         if (response.status) {
                             let total = response.total;
+                            let limit = endRecord && endRecord <= total ? endRecord : total;
                             let currentOffset = response.next_offset || offset; // Handle if no next_offset
-                            if (response.done) currentOffset = total; // If done, ensure it shows 100%
+                            if (response.done) currentOffset = limit; // If done, ensure it shows 100%
 
                             totalSuccess += response.success;
                             totalFailed += response.failed;
 
-                            // Update progress bar
-                            let percentage = total > 0 ? Math.round((currentOffset / total) * 100) : 100;
+                            // Update progress bar relative to the requested range
+                            let totalToProcess = limit - initialOffset;
+                            let processed = currentOffset - initialOffset;
+                            let percentage = totalToProcess > 0 ? Math.round((processed / totalToProcess) * 100) : 100;
+                            if (percentage > 100) percentage = 100;
+
                             $bar.css('width', percentage + '%').text(percentage + '%');
                             
                             $('#progress_success_sinkron_simkeu').text('✓ Berhasil: ' + totalSuccess);
                             $('#progress_failed_sinkron_simkeu').text('✗ Gagal: ' + totalFailed);
-                            $('#progress_total_sinkron_simkeu').text('Total: ' + currentOffset + '/' + total);
+                            $('#progress_total_sinkron_simkeu').text('Data: ' + currentOffset + '/' + limit + ' (Total DB: ' + total + ')');
 
                             // Fill log table
                             response.logs.forEach(function(log) {
@@ -316,7 +345,7 @@
             }
 
             // Start first batch
-            processBatch(0);
+            processBatch(initialOffset);
         }
     </script>
 @endpush

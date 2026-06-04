@@ -292,10 +292,12 @@ class SettingController extends Controller
                 'tahun_id'   => 'required|integer',
                 'batch_size' => 'nullable|integer|min:1|max:50',
                 'offset'     => 'nullable|integer|min:0',
+                'end_record' => 'nullable|integer|min:1',
             ]);
 
             $batchSize = $request->batch_size ?? 10;
             $offset    = $request->offset ?? 0;
+            $endRecord = $request->end_record;
 
             // Query dasar
             $baseQuery = Pembayaran::with(['peserta.tahun'])
@@ -318,11 +320,33 @@ class SettingController extends Controller
                 ]);
             }
 
+            if (!$endRecord || $endRecord > $total) {
+                $endRecord = $total;
+            }
+
+            if ($offset >= $endRecord) {
+                return response()->json([
+                    'status'   => true,
+                    'done'     => true,
+                    'message'  => 'Semua data dalam rentang sudah diproses',
+                    'total'    => $total,
+                    'offset'   => $offset,
+                    'success'  => 0,
+                    'failed'   => 0,
+                    'logs'     => [],
+                ]);
+            }
+
+            $take = $batchSize;
+            if ($offset + $take > $endRecord) {
+                $take = $endRecord - $offset;
+            }
+
             // Ambil batch sesuai offset
             $batch = (clone $baseQuery)
                 ->orderBy('pembayaran.id', 'asc')
                 ->skip($offset)
-                ->take($batchSize)
+                ->take($take)
                 ->get();
 
             if ($batch->isEmpty()) {
@@ -377,7 +401,7 @@ class SettingController extends Controller
 
             return response()->json([
                 'status'      => true,
-                'done'        => $nextOffset >= $total,
+                'done'        => $nextOffset >= $endRecord,
                 'message'     => "Batch selesai: {$success} berhasil, {$failed} gagal",
                 'total'       => $total,
                 'offset'      => $offset,

@@ -63,11 +63,6 @@ class SimkeuApp
      */
     public function kirimPembayaranWisuda(array $data): array
     {
-        // Auto-mapping jenis_pembayaran jika belum dikonversi
-        if (isset($data['jenis_pembayaran'])) {
-            $data['jenis_pembayaran'] = self::mapJenisPembayaran($data['jenis_pembayaran']);
-        }
-
         $url = "{$this->baseUrl}/api/helper/pembayaran-wisuda";
 
         try {
