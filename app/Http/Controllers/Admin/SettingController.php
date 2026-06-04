@@ -16,6 +16,7 @@ use Intervention\Image\Facades\Image;
 use Illuminate\Http\Request;
 use Illuminate\Support\Carbon;
 use Illuminate\Support\Facades\DB;
+use Illuminate\Support\Facades\Log;
 use Illuminate\Support\Str;
 use Milon\Barcode\Facades\DNS2DFacade;
 
@@ -382,7 +383,7 @@ class SettingController extends Controller
 
                 $result = $simkeu->kirimPembayaranWisuda($payload);
 
-                $logs[] = [
+                $logEntry = [
                     'no'      => $offset + $index + 1,
                     'nim'     => $nim,
                     'jumlah'  => $pembayaran->jumlah,
@@ -390,10 +391,23 @@ class SettingController extends Controller
                     'message' => $result['message'],
                 ];
 
+                $logs[] = $logEntry;
+
+                // Simpan ke log file khusus simkeu_sinkron
+                $logContext = [
+                    'pembayaran_id' => $pembayaran->id,
+                    'nim'           => $nim,
+                    'jumlah'        => $pembayaran->jumlah,
+                    'payload'       => $payload,
+                    'response'      => $result['response'] ?? null,
+                    'message'       => $result['message'],
+                ];
+
                 if ($result['success']) {
                     $success++;
                 } else {
                     $failed++;
+                    Log::channel('simkeu_sinkron')->error("GAGAL | NIM: {$nim} | Rp " . number_format($pembayaran->jumlah, 0, ',', '.') . " | {$result['message']}", $logContext);
                 }
             }
 
@@ -460,7 +474,21 @@ class SettingController extends Controller
                     'tahun.nama as tahun_nama',
                     'users.jenis_kelamin',
                 )
-                ->orderBy('pembayaran.created_at', 'desc');
+                ->orderBy('pembayaran.created_at', 'desc')
+                ->groupBy(
+                    'pembayaran.id',
+                    'pembayaran.jumlah',
+                    'pembayaran.jenis_pembayaran',
+                    'pembayaran.keterangan',
+                    'pembayaran.created_at',
+                    'peserta.nim',
+                    'peserta.nama',
+                    'prodi.nama',
+                    'prodi.alias',
+                    'tahun.kode',
+                    'tahun.nama',
+                    'users.jenis_kelamin'
+                );
 
             $paginated = $query->paginate($perPage);
 
@@ -514,6 +542,18 @@ class SettingController extends Controller
 
             $simkeu = new SimkeuApp();
             $result = $simkeu->kirimPembayaranWisuda($payload);
+
+            // Log error ke file khusus
+            if (!$result['success']) {
+                Log::channel('simkeu_sinkron')->error("TES GAGAL | NIM: {$pembayaran->peserta->nim} | Rp " . number_format($pembayaran->jumlah, 0, ',', '.') . " | {$result['message']}", [
+                    'pembayaran_id' => $pembayaran->id,
+                    'nim'           => $pembayaran->peserta->nim,
+                    'jumlah'        => $pembayaran->jumlah,
+                    'payload'       => $payload,
+                    'response'      => $result['response'] ?? null,
+                    'message'       => $result['message'],
+                ]);
+            }
 
             return response()->json([
                 'status'  => $result['success'],

@@ -99,6 +99,13 @@ return [
         'emergency' => [
             'path' => storage_path('logs/laravel.log'),
         ],
+
+        'simkeu_sinkron' => [
+            'driver' => 'daily',
+            'path'   => storage_path('logs/simkeu-sinkron.log'),
+            'level'  => 'debug',
+            'days'   => 30,
+        ],
     ],
 
 ];
