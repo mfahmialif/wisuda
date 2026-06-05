@@ -43,6 +43,20 @@
                 </select>
             </div>
             <div class="row">
+                <div class="col-md-6">
+                    <div class="form-group">
+                        <label>Tanggal Awal</label>
+                        <input type="date" class="form-control" name="tanggal_awal" id="tanggal_awal_sinkron_simkeu">
+                    </div>
+                </div>
+                <div class="col-md-6">
+                    <div class="form-group">
+                        <label>Tanggal Akhir</label>
+                        <input type="date" class="form-control" name="tanggal_akhir" id="tanggal_akhir_sinkron_simkeu">
+                    </div>
+                </div>
+            </div>
+            <div class="row">
                 <div class="col-md-3">
                     <div class="form-group">
                         <label for="start_record_sinkron_simkeu">Mulai dari Data Ke-</label>
@@ -168,7 +182,7 @@
             });
 
             // Hitung jumlah pembayaran saat tahun/jenjang berubah
-            $('#tahun_id_sinkron_simkeu, #jenjang_sinkron_simkeu').change(function() {
+            $('#tahun_id_sinkron_simkeu, #jenjang_sinkron_simkeu, #tanggal_awal_sinkron_simkeu, #tanggal_akhir_sinkron_simkeu').change(function() {
                 getCountSinkronSimkeu();
             });
             getCountSinkronSimkeu();
@@ -190,10 +204,12 @@
         function getCountSinkronSimkeu() {
             let tahunId = $('#tahun_id_sinkron_simkeu').val();
             let prodiJenjang = $('#jenjang_sinkron_simkeu').val();
+            let tanggalAwal = $('#tanggal_awal_sinkron_simkeu').val();
+            let tanggalAkhir = $('#tanggal_akhir_sinkron_simkeu').val();
             $.ajax({
                 type: "GET",
                 url: "{{ route('admin.setting.sinkronSimkeuCount') }}",
-                data: { tahun_id: tahunId, jenjang: prodiJenjang },
+                data: { tahun_id: tahunId, jenjang: prodiJenjang, tanggal_awal: tanggalAwal, tanggal_akhir: tanggalAkhir },
                 dataType: "json",
                 success: function(response) {
                     if (response.status) {
@@ -211,6 +227,8 @@
             let prodiJenjang   = $('#jenjang_sinkron_simkeu').val();
             let startRecord = parseInt($('#start_record_sinkron_simkeu').val()) || 1;
             let endRecord = parseInt($('#end_record_sinkron_simkeu').val()) || null;
+            let tanggalAwal = $('#tanggal_awal_sinkron_simkeu').val();
+            let tanggalAkhir = $('#tanggal_akhir_sinkron_simkeu').val();
 
             Swal.fire({
                 title: 'Konfirmasi Sinkronisasi',
@@ -223,12 +241,12 @@
                 cancelButtonText: 'Batal'
             }).then((result) => {
                 if (result.isConfirmed) {
-                    execSinkronSimkeu(tahunId, batchSize, prodiJenjang, startRecord, endRecord);
+                    execSinkronSimkeu(tahunId, batchSize, prodiJenjang, startRecord, endRecord, tanggalAwal, tanggalAkhir);
                 }
             });
         }
 
-        function execSinkronSimkeu(tahunId, batchSize, prodiJenjang, startRecord, endRecord) {
+        function execSinkronSimkeu(tahunId, batchSize, prodiJenjang, startRecord, endRecord, tanggalAwal, tanggalAkhir) {
             // Reset UI
             let $btn = $('#form_submit_sinkron_simkeu');
             let $progress = $('#progress_container_sinkron_simkeu');
@@ -257,6 +275,8 @@
                     tahun_id: tahunId,
                     batch_size: batchSize,
                     jenjang: prodiJenjang,
+                    tanggal_awal: tanggalAwal,
+                    tanggal_akhir: tanggalAkhir,
                     offset: offset
                 };
                 if (endRecord) {

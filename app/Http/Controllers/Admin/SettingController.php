@@ -265,6 +265,9 @@ class SettingController extends Controller
                     $q->join('prodi as prodi_filter', 'prodi_filter.id', '=', 'peserta.prodi_id')
                        ->where('prodi_filter.jenjang', $request->jenjang);
                 })
+                ->when($request->tanggal_awal && $request->tanggal_akhir, function ($q) use ($request) {
+                    $q->whereBetween('pembayaran.created_at', [$request->tanggal_awal . ' 00:00:00', $request->tanggal_akhir . ' 23:59:59']);
+                })
                 ->count();
 
             return [
@@ -294,6 +297,8 @@ class SettingController extends Controller
                 'batch_size' => 'nullable|integer|min:1|max:50',
                 'offset'     => 'nullable|integer|min:0',
                 'end_record' => 'nullable|integer|min:1',
+                'tanggal_awal'  => 'nullable|date',
+                'tanggal_akhir' => 'nullable|date',
             ]);
 
             $batchSize = $request->batch_size ?? 10;
@@ -309,6 +314,9 @@ class SettingController extends Controller
                             $pq->where('jenjang', $request->jenjang);
                         });
                     }
+                })
+                ->when($request->tanggal_awal && $request->tanggal_akhir, function ($q) use ($request) {
+                    $q->whereBetween('pembayaran.created_at', [$request->tanggal_awal . ' 00:00:00', $request->tanggal_akhir . ' 23:59:59']);
                 });
 
             // Hitung total (hanya pada request pertama untuk efisiensi)
@@ -459,6 +467,9 @@ class SettingController extends Controller
                         $q2->where('peserta.nim', 'LIKE', "%{$request->search}%")
                            ->orWhere('peserta.nama', 'LIKE', "%{$request->search}%");
                     });
+                })
+                ->when($request->tanggal_awal && $request->tanggal_akhir, function ($q) use ($request) {
+                    $q->whereBetween('pembayaran.created_at', [$request->tanggal_awal . ' 00:00:00', $request->tanggal_akhir . ' 23:59:59']);
                 })
                 ->select(
                     'pembayaran.id',

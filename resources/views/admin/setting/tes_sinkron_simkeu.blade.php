@@ -59,6 +59,20 @@
                 </div>
             </div>
         </div>
+        <div class="row">
+            <div class="col-md-3">
+                <div class="form-group">
+                    <label>Tanggal Awal</label>
+                    <input type="date" class="form-control" id="tanggal_awal_tes_sinkron">
+                </div>
+            </div>
+            <div class="col-md-3">
+                <div class="form-group">
+                    <label>Tanggal Akhir</label>
+                    <input type="date" class="form-control" id="tanggal_akhir_tes_sinkron">
+                </div>
+            </div>
+        </div>
 
         {{-- Tabel --}}
         <div id="loading_tes_sinkron" class="text-center text-muted py-3">
@@ -126,7 +140,7 @@ var _jenisBayarMap = @json(\App\Http\Services\SimkeuApp::JENIS_PEMBAYARAN_MAP ??
 
 $(document).ready(function () {
     // Events
-    $('#tahun_id_tes_sinkron, #per_page_tes_sinkron, #jenjang_tes_sinkron').on('change', function () {
+    $('#tahun_id_tes_sinkron, #per_page_tes_sinkron, #jenjang_tes_sinkron, #tanggal_awal_tes_sinkron, #tanggal_akhir_tes_sinkron').on('change', function () {
         _tesSinkronPage = 1;
         tesSinkronLoad();
     });
@@ -156,6 +170,8 @@ function tesSinkronLoad(page) {
         jenjang: $('#jenjang_tes_sinkron').val(),
         per_page: $('#per_page_tes_sinkron').val(),
         search: $('#search_tes_sinkron').val(),
+        tanggal_awal: $('#tanggal_awal_tes_sinkron').val(),
+        tanggal_akhir: $('#tanggal_akhir_tes_sinkron').val(),
         page: _tesSinkronPage
     }, function (res) {
         $('#loading_tes_sinkron').addClass('d-none');
